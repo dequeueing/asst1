@@ -28,16 +28,16 @@ extern void mandelbrotSerial(
 //
 // Thread entrypoint.
 void workerThreadStart(WorkerArgs * const args) {
-    // Calculate rows per thread (half of the total height)
-    int rowsPerThread = args->height / 2;
+    // Calculate rows per thread
+    int rowsPerThread = args->height / args->numThreads;
     
     // Calculate start row for this thread
     int startRow = args->threadId * rowsPerThread;
     
     // Calculate number of rows for this thread
-    // For thread 0: top half
-    // For thread 1: bottom half
-    int numRows = (args->threadId == 0) ? rowsPerThread : (args->height - rowsPerThread);
+    // Last thread gets any remaining rows
+    int numRows = (args->threadId == args->numThreads - 1) ? 
+                  (args->height - startRow) : rowsPerThread;
     
     // Call mandelbrotSerial with the appropriate parameters
     mandelbrotSerial(
