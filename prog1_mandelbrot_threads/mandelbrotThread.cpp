@@ -28,6 +28,9 @@ extern void mandelbrotSerial(
 //
 // Thread entrypoint.
 void workerThreadStart(WorkerArgs * const args) {
+    // Start timing
+    double startTime = CycleTimer::currentSeconds();
+    
     // Calculate rows per thread
     int rowsPerThread = args->height / args->numThreads;
     
@@ -47,6 +50,15 @@ void workerThreadStart(WorkerArgs * const args) {
         args->maxIterations,
         args->output
     );
+    
+    // End timing
+    double endTime = CycleTimer::currentSeconds();
+    double threadTime = endTime - startTime;
+    
+    // Print timing information
+    printf("Thread %d: processed %d rows (from row %d to %d) in %.3f ms\n",
+           args->threadId, numRows, startRow, startRow + numRows - 1,
+           threadTime * 1000);
 }
 
 //

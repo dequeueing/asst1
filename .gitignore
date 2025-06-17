@@ -1,6 +1,7 @@
 # ispc-*/
 ispc-*
 .vscode/
+.github/
 
 *.o
 *.out
