@@ -1,7 +1,11 @@
 #include <stdio.h>
 #include <thread>
+#include <algorithm>
 
 #include "CycleTimer.h"
+
+// Forward declaration of the mandel function
+static inline int mandel(float c_re, float c_im, int count);
 
 typedef struct {
     float x0, x1;
@@ -31,34 +35,49 @@ void workerThreadStart(WorkerArgs * const args) {
     // Start timing
     double startTime = CycleTimer::currentSeconds();
     
-    // Calculate rows per thread
-    int rowsPerThread = args->height / args->numThreads;
+    // Calculate coordinate deltas (same as serial implementation)
+    float dx = (args->x1 - args->x0) / args->width;
+    float dy = (args->y1 - args->y0) / args->height;
     
-    // Calculate start row for this thread
-    int startRow = args->threadId * rowsPerThread;
+    // Define block size (32x32 pixels)
+    const int BLOCK_SIZE = 32;
     
-    // Calculate number of rows for this thread
-    // Last thread gets any remaining rows
-    int numRows = (args->threadId == args->numThreads - 1) ? 
-                  (args->height - startRow) : rowsPerThread;
+    // Calculate number of blocks in each dimension
+    int blocksX = (args->width + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    int blocksY = (args->height + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    int totalBlocks = blocksX * blocksY;
     
-    // Call mandelbrotSerial with the appropriate parameters
-    mandelbrotSerial(
-        args->x0, args->y0, args->x1, args->y1,
-        args->width, args->height,
-        startRow, numRows,
-        args->maxIterations,
-        args->output
-    );
+    // Each thread takes every nth block where n is the number of threads
+    for (int block = args->threadId; block < totalBlocks; block += args->numThreads) {
+        int blockX = block % blocksX;
+        int blockY = block / blocksX;
+        
+        // Calculate start and end coordinates for this block
+        int startX = blockX * BLOCK_SIZE;
+        int startY = blockY * BLOCK_SIZE;
+        int endX = std::min<int>(startX + BLOCK_SIZE, args->width);
+        int endY = std::min<int>(startY + BLOCK_SIZE, args->height);
+        
+        // Process each pixel in this block
+        for (int y = startY; y < endY; y++) {
+            for (int x = startX; x < endX; x++) {
+                // Use same coordinate calculation as serial version
+                float x_coord = args->x0 + x * dx;
+                float y_coord = args->y0 + y * dy;
+                int index = y * args->width + x;
+                args->output[index] = mandel(x_coord, y_coord, args->maxIterations);
+            }
+        }
+    }
     
     // End timing
     double endTime = CycleTimer::currentSeconds();
     double threadTime = endTime - startTime;
     
     // Print timing information
-    printf("Thread %d: processed %d rows (from row %d to %d) in %.3f ms\n",
-           args->threadId, numRows, startRow, startRow + numRows - 1,
-           threadTime * 1000);
+    // printf("Thread %d: processed %d blocks in %.3f ms\n",
+    //        args->threadId, (totalBlocks - args->threadId + args->numThreads - 1) / args->numThreads,
+    //        threadTime * 1000);
 }
 
 //
@@ -115,5 +134,20 @@ void mandelbrotThread(
     for (int i=1; i<numThreads; i++) {
         workers[i].join();
     }
+}
+
+static inline int mandel(float c_re, float c_im, int count) {
+    float z_re = c_re, z_im = c_im;
+    int i;
+    for (i = 0; i < count; ++i) {
+        if (z_re * z_re + z_im * z_im > 4.f)
+            break;
+
+        float new_re = z_re * z_re - z_im * z_im;
+        float new_im = 2.f * z_re * z_im;
+        z_re = c_re + new_re;
+        z_im = c_im + new_im;
+    }
+    return i;
 }
 
