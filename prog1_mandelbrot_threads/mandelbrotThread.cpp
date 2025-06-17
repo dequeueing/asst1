@@ -28,14 +28,25 @@ extern void mandelbrotSerial(
 //
 // Thread entrypoint.
 void workerThreadStart(WorkerArgs * const args) {
-
-    // TODO FOR CS149 STUDENTS: Implement the body of the worker
-    // thread here. Each thread should make a call to mandelbrotSerial()
-    // to compute a part of the output image.  For example, in a
-    // program that uses two threads, thread 0 could compute the top
-    // half of the image and thread 1 could compute the bottom half.
-
-    printf("Hello world from thread %d\n", args->threadId);
+    // Calculate rows per thread (half of the total height)
+    int rowsPerThread = args->height / 2;
+    
+    // Calculate start row for this thread
+    int startRow = args->threadId * rowsPerThread;
+    
+    // Calculate number of rows for this thread
+    // For thread 0: top half
+    // For thread 1: bottom half
+    int numRows = (args->threadId == 0) ? rowsPerThread : (args->height - rowsPerThread);
+    
+    // Call mandelbrotSerial with the appropriate parameters
+    mandelbrotSerial(
+        args->x0, args->y0, args->x1, args->y1,
+        args->width, args->height,
+        startRow, numRows,
+        args->maxIterations,
+        args->output
+    );
 }
 
 //

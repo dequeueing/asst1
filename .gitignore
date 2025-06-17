@@ -1,0 +1,15 @@
+# ispc-*/
+ispc-*
+.vscode/
+
+*.o
+*.out
+*.exe
+*.bin
+*.png
+*.ppm
+*.bmp
+*.jpg
+*.jpeg
+*.gif
+prog1_mandelbrot_threads/mandelbrot
