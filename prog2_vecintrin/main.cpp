@@ -362,34 +362,20 @@ float arraySumVector(float* values, int N) {
     _cs149_vadd_float(sum_vec, sum_vec, temp_vec, maskAll);
   }
   
-  // Step 2: Tree reduction using hadd operations
-  // After hadd: [0+1, 0+1, 2+3, 2+3, ...] for VECTOR_WIDTH elements
+  // Step 2: Tree reduction using hadd and interleave operations
   // We need log2(VECTOR_WIDTH) steps to reduce to single value
   
   __cs149_vec_float reduced_vec = sum_vec;
   
-  // First hadd: pairs elements (width/2 unique sums)
+  // First hadd: pairs adjacent elements
   _cs149_hadd_float(reduced_vec, reduced_vec);
   
-  // Now we have [sum01, sum01, sum23, sum23, ...]
-  // For VECTOR_WIDTH=4: [sum01, sum01, sum23, sum23]
-  // We need to add sum01 + sum23
-  
-  if (VECTOR_WIDTH >= 4) {
-    // Use interleave to rearrange: [sum01, sum23, sum01, sum23]
+  // Continue reduction for any VECTOR_WIDTH >= 4
+  // Each iteration reduces the problem size by half
+  for (int step_width = VECTOR_WIDTH / 2; step_width >= 2; step_width /= 2) {
+    // Interleave to rearrange elements for next reduction step
     _cs149_interleave_float(reduced_vec, reduced_vec);
-    // Another hadd to get final sum
-    _cs149_hadd_float(reduced_vec, reduced_vec);
-  }
-  
-  if (VECTOR_WIDTH >= 8) {
-    // For larger vector widths, continue the pattern
-    _cs149_interleave_float(reduced_vec, reduced_vec);
-    _cs149_hadd_float(reduced_vec, reduced_vec);
-  }
-  
-  if (VECTOR_WIDTH >= 16) {
-    _cs149_interleave_float(reduced_vec, reduced_vec);
+    // Add adjacent pairs again
     _cs149_hadd_float(reduced_vec, reduced_vec);
   }
   
@@ -397,3 +383,9 @@ float arraySumVector(float* values, int N) {
   return reduced_vec.value[0];
 }
 
+// 1,2,3,4,5,6,7,8
+// 3,3,7,7,11,11,15,15
+// 3,7,11,15,3,7,11,15
+// 10,10,26,26,10,10,26,26
+// 10,26,10,26,10,26,10,26
+// 36,36,36,36,36,36,36,36
