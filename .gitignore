@@ -14,3 +14,4 @@ ispc-*
 *.jpeg
 *.gif
 prog1_mandelbrot_threads/mandelbrot
+prog2_vecintrin/myexp

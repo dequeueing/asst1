@@ -20,6 +20,21 @@ float arraySumSerial(float* values, int N);
 float arraySumVector(float* values, int N);
 bool verifyResult(float* values, int* exponents, float* output, float* gold, int N);
 
+int wow(int argc, char * argv[]) {
+  // try absVector
+  
+  float values[] = {1.0f, -2.0f, 3.0f, -4.0f, 5.0f, -6.0f, 7.0f, -8.0f, -9.0f};
+  float output[10];
+
+  absVector(values, output, 9);
+  printf("Abs Vector Result:\n");
+  for (int i = 0; i < 10; i++) {
+    printf("%f ", output[i]);
+  }
+  printf("\n");
+  return 0;
+}
+
 int main(int argc, char * argv[]) {
   int N = 16;
   bool printLog = false;
@@ -249,7 +264,71 @@ void clampedExpVector(float* values, int* exponents, float* output, int N) {
   // Your solution should work for any value of
   // N and VECTOR_WIDTH, not just when VECTOR_WIDTH divides N
   //
+
+  // Declare vector variables
+  __cs149_vec_float x, result, clamp_val, one_val;
+  __cs149_vec_int y, count, zero_int, one_int;
+  __cs149_mask maskAll, maskExpZero, maskNotExpZero, maskCountPos, maskToClamp;
   
+  // Initialize constant vectors
+  clamp_val = _cs149_vset_float(9.999999f);
+  one_val = _cs149_vset_float(1.0f);
+  zero_int = _cs149_vset_int(0);
+  one_int = _cs149_vset_int(1);
+
+  // iterate each width of vectors and convert values into vector
+  for (int i = 0; i < N; i += VECTOR_WIDTH) {
+    
+    // Handle case where N is not divisible by VECTOR_WIDTH
+    int remaining = N - i;
+    if (remaining >= VECTOR_WIDTH) {
+      maskAll = _cs149_init_ones();
+    } else {
+      maskAll = _cs149_init_ones(remaining);
+    }
+    
+    // Load input vectors
+    _cs149_vload_float(x, values + i, maskAll);
+    _cs149_vload_int(y, exponents + i, maskAll);
+    
+    // handle special case of exponent == 0
+    _cs149_veq_int(maskExpZero, y, zero_int, maskAll);
+    maskNotExpZero = _cs149_mask_not(maskExpZero);
+    maskNotExpZero = _cs149_mask_and(maskNotExpZero, maskAll);
+    
+    // Set result to 1.0 for exponent == 0 cases
+    _cs149_vset_float(result, 1.0f, maskExpZero);
+    
+    // vec1: the value, vec2: corresponding exponent - 1
+    // For exponent != 0 cases, initialize result = x and count = y - 1
+    _cs149_vmove_float(result, x, maskNotExpZero);
+    _cs149_vsub_int(count, y, one_int, maskNotExpZero);
+    
+    // continue if there is exponent != 0
+    // for each iteration, do the multiplication if the mask is not zero
+    while (_cs149_cntbits(maskNotExpZero) > 0) {
+      // Check which lanes still have count > 0
+      _cs149_vgt_int(maskCountPos, count, zero_int, maskNotExpZero);
+      
+      // If no lanes have count > 0, break
+      if (_cs149_cntbits(maskCountPos) == 0) {
+        break;
+      }
+      
+      // Multiply result by x for lanes with count > 0
+      _cs149_vmult_float(result, result, x, maskCountPos);
+      
+      // Decrement count for lanes with count > 0
+      _cs149_vsub_int(count, count, one_int, maskCountPos);
+    }
+    
+    // Clamp result to 9.999999 if exceeded
+    _cs149_vgt_float(maskToClamp, result, clamp_val, maskAll);
+    _cs149_vmove_float(result, clamp_val, maskToClamp);
+    
+    // Store results
+    _cs149_vstore_float(output + i, result, maskAll);
+  }
 }
 
 // returns the sum of all elements in values
