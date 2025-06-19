@@ -350,10 +350,50 @@ float arraySumVector(float* values, int N) {
   // CS149 STUDENTS TODO: Implement your vectorized version of arraySumSerial here
   //
   
-  for (int i=0; i<N; i+=VECTOR_WIDTH) {
-
+  __cs149_vec_float sum_vec, temp_vec;
+  __cs149_mask maskAll = _cs149_init_ones();
+  
+  // Initialize sum vector to zeros
+  sum_vec = _cs149_vset_float(0.0f);
+  
+  // Step 1: Sum all elements into the vector (N/VECTOR_WIDTH operations)
+  for (int i = 0; i < N; i += VECTOR_WIDTH) {
+    _cs149_vload_float(temp_vec, values + i, maskAll);
+    _cs149_vadd_float(sum_vec, sum_vec, temp_vec, maskAll);
   }
-
-  return 0.0;
+  
+  // Step 2: Tree reduction using hadd operations
+  // After hadd: [0+1, 0+1, 2+3, 2+3, ...] for VECTOR_WIDTH elements
+  // We need log2(VECTOR_WIDTH) steps to reduce to single value
+  
+  __cs149_vec_float reduced_vec = sum_vec;
+  
+  // First hadd: pairs elements (width/2 unique sums)
+  _cs149_hadd_float(reduced_vec, reduced_vec);
+  
+  // Now we have [sum01, sum01, sum23, sum23, ...]
+  // For VECTOR_WIDTH=4: [sum01, sum01, sum23, sum23]
+  // We need to add sum01 + sum23
+  
+  if (VECTOR_WIDTH >= 4) {
+    // Use interleave to rearrange: [sum01, sum23, sum01, sum23]
+    _cs149_interleave_float(reduced_vec, reduced_vec);
+    // Another hadd to get final sum
+    _cs149_hadd_float(reduced_vec, reduced_vec);
+  }
+  
+  if (VECTOR_WIDTH >= 8) {
+    // For larger vector widths, continue the pattern
+    _cs149_interleave_float(reduced_vec, reduced_vec);
+    _cs149_hadd_float(reduced_vec, reduced_vec);
+  }
+  
+  if (VECTOR_WIDTH >= 16) {
+    _cs149_interleave_float(reduced_vec, reduced_vec);
+    _cs149_hadd_float(reduced_vec, reduced_vec);
+  }
+  
+  // The final sum should now be in reduced_vec.value[0]
+  return reduced_vec.value[0];
 }
 
