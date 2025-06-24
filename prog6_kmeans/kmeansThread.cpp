@@ -89,6 +89,64 @@ void computeAssignments(WorkerArgs *const args) {
 }
 
 /**
+ * Worker function for parallel assignment of data points to clusters.
+ * Each thread processes a range of data points from args->start to args->end.
+ */
+void computeAssignmentsWorker(WorkerArgs *const args) {
+  // Each thread processes data points from args->start to args->end
+  for (int m = args->start; m < args->end; m++) {
+    double minDist = 1e30;
+    int bestAssignment = -1;
+    
+    // Find the closest centroid for this data point
+    for (int k = 0; k < args->K; k++) {
+      double d = dist(&args->data[m * args->N],
+                      &args->clusterCentroids[k * args->N], args->N);
+      if (d < minDist) {
+        minDist = d;
+        bestAssignment = k;
+      }
+    }
+    
+    args->clusterAssignments[m] = bestAssignment;
+  }
+}
+
+/**
+ * Parallel version of computeAssignments using multiple threads.
+ */
+void computeAssignmentsParallel(WorkerArgs *const args) {
+  const int numThreads = std::thread::hardware_concurrency();
+  std::thread workers[numThreads];
+  WorkerArgs workerArgs[numThreads];
+  
+  int pointsPerThread = args->M / numThreads;
+  int remainingPoints = args->M % numThreads;
+  
+  // Launch threads
+  for (int t = 0; t < numThreads; t++) {
+    // Copy shared data to each worker
+    workerArgs[t] = *args;
+    
+    // Assign data point range to this thread
+    workerArgs[t].start = t * pointsPerThread;
+    workerArgs[t].end = (t + 1) * pointsPerThread;
+    
+    // Last thread handles any remaining points
+    if (t == numThreads - 1) {
+      workerArgs[t].end += remainingPoints;
+    }
+    
+    workers[t] = std::thread(computeAssignmentsWorker, &workerArgs[t]);
+  }
+  
+  // Wait for all threads to complete
+  for (int t = 0; t < numThreads; t++) {
+    workers[t].join();
+  }
+}
+
+/**
  * Given the cluster assignments, computes the new centroid locations for
  * each cluster.
  */
@@ -197,6 +255,10 @@ void kMeansThread(double *data, double *clusterCentroids, int *clusterAssignment
 
   /* Main K-Means Algorithm Loop */
   int iter = 0;
+  double totalAssignmentTime = 0.0;
+  double totalCentroidTime = 0.0;
+  double totalCostTime = 0.0;
+  
   while (!stoppingConditionMet(prevCost, currCost, epsilon, K)) {
     // Update cost arrays (for checking convergence criteria)
     for (int k = 0; k < K; k++) {
@@ -207,12 +269,42 @@ void kMeansThread(double *data, double *clusterCentroids, int *clusterAssignment
     args.start = 0;
     args.end = K;
 
-    computeAssignments(&args);
+    // Time computeAssignments (parallel version)
+    double startTime = CycleTimer::currentSeconds();
+    computeAssignmentsParallel(&args);
+    double endTime = CycleTimer::currentSeconds();
+    totalAssignmentTime += (endTime - startTime);
+
+    // Time computeCentroids
+    startTime = CycleTimer::currentSeconds();
     computeCentroids(&args);
+    endTime = CycleTimer::currentSeconds();
+    totalCentroidTime += (endTime - startTime);
+
+    // Time computeCost
+    startTime = CycleTimer::currentSeconds();
     computeCost(&args);
+    endTime = CycleTimer::currentSeconds();
+    totalCostTime += (endTime - startTime);
 
     iter++;
   }
+
+  // Print profiling results
+  printf("=== PROFILING RESULTS ===\n");
+  printf("Total iterations: %d\n", iter);
+  printf("computeAssignments total time: %.3f ms (%.1f%%)\n", 
+         totalAssignmentTime * 1000, 
+         (totalAssignmentTime / (totalAssignmentTime + totalCentroidTime + totalCostTime)) * 100);
+  printf("computeCentroids total time: %.3f ms (%.1f%%)\n", 
+         totalCentroidTime * 1000,
+         (totalCentroidTime / (totalAssignmentTime + totalCentroidTime + totalCostTime)) * 100);
+  printf("computeCost total time: %.3f ms (%.1f%%)\n", 
+         totalCostTime * 1000,
+         (totalCostTime / (totalAssignmentTime + totalCentroidTime + totalCostTime)) * 100);
+  printf("Total measured time: %.3f ms\n", 
+         (totalAssignmentTime + totalCentroidTime + totalCostTime) * 1000);
+  printf("========================\n");
 
   free(currCost);
   free(prevCost);
